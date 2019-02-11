@@ -44,22 +44,7 @@
                     </a>
                 </li>
                 <!-- Number of rows per page starts here -->
-                <div class="dropdown show vbt-per-page-dropdown">
-                    <a class="btn btn-primary dropdown-toggle" href="#" role="button" id="dropdownMenuLink" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        {{per_page}}
-                    </a>
 
-                    <div class="dropdown-menu" aria-labelledby="dropdownMenuLink">
-                        <a v-for="(option, key, index) in per_page_options" :key="index" class="dropdown-item" href="" @click.prevent="perPageHandler(option)" v-bind:class="{ active:  (option == per_page)}">
-                            {{option}}
-                        </a>
-                    </div>
-                </div>
-                <!-- Number of rows per page ends here -->
-
-                <div class="input-group col-sm-2">
-                    <input type="number" class="form-control" min="1" step="1" :max="totalPages" placeholder="Go to page" @keyup.enter="gotoPage" v-model.number="go_to_page">
-                </div>
             </ul>
         </nav>
     </div>
@@ -112,7 +97,7 @@
                 }
 
                 //Handle the new page
-                this.pageHandler(this.go_to_page)           
+                this.pageHandler(this.go_to_page)
             },
             pageHandler(index) {
                 if (index >= 1 && index <= this.totalPages) {
@@ -131,9 +116,9 @@
                 }
 
                 //Skip recalculating if the previous and next pages are already visible
-                if (!force && 
+                if (!force &&
                     (includes(this.range, this.page - 1) || this.page == 1) &&
-                    (includes(this.range, this.page + 1) || this.page == this.totalPages) 
+                    (includes(this.range, this.page + 1) || this.page == this.totalPages)
                 ) { return; }
 
                 //Current page is the start page minus one

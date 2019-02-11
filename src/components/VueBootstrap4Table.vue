@@ -14,7 +14,7 @@
                                     <div class="col-md-4">
                                         <div class=row>
                                             <!-- global search text starts here -->
-                                            <div class="col-md-6 input-group vbt-global-search" v-if="global_search.visibility">
+                                            <div class="col-md-9 input-group vbt-global-search" v-if="global_search.visibility">
                                                 <input ref="global_search" type="text" class="form-control" :placeholder="global_search.placeholder" @keyup.stop="updateGlobalSearch($event)" value="">
                                                 <div class="input-group-append vbt-global-search-clear" @click="clearGlobalSearch">
                                                     <span class="input-group-text">
@@ -27,7 +27,7 @@
                                             <!-- global search text ends here -->
 
                                             <!-- refresh & reset button starts here -->
-                                            <div class="col-md-6">
+                                            <div class="col-md-3">
                                                 <div class="btn-group" role="group" aria-label="Table Actions buttons">
                                                     <button v-if="show_refresh_button" type="button" class="btn btn-secondary vbt-refresh-button" @click="$emit('refresh-data')">
                                                         <slot name="refresh-button-text">
@@ -103,6 +103,11 @@
                                 <template v-if="hasFilter(column)">
                                     <Simple v-if="column.filter.type == 'simple'" :column="column" @update-filter="updateFilter" @clear-filter="clearFilter"></Simple>
                                     <MultiSelect v-if="column.filter.type == 'select'" :options="column.filter.options" :column="column" @update-multi-select-filter="updateMultiSelectFilter" @clear-filter="clearFilter"></MultiSelect>
+                                    <template v-if="column.filter.type == 'custom'">
+                                        <slot :name="column.filter.slot_name" :column="column">
+
+                                        </slot>
+                                    </template>
                                 </template>
                             </td>
                         </tr>
@@ -127,7 +132,18 @@
                                         {{getValueFromRow(row,column.name)}}
                                 </slot>
                             </template>
+
                         </row>
+                        <!-- empty row starts here -->
+                        <tr v-show="vbt_rows == 0">
+                            <td :colspan="headerColSpan">
+                                <slot name="empty-results">
+                                    No results found
+                                </slot>
+                            </td>
+                        </tr>
+                        <!-- empty row ends here -->
+
                         <!-- data rows ends here -->
 
                         <!-- Pagination row starts here -->
@@ -313,6 +329,12 @@ export default {
                 return [];
             }
         },
+        customFilters: {
+            type: Array,
+            default: function () {
+                return [];
+            }
+        },
     },
     data: function () {
         return {
@@ -350,7 +372,8 @@ export default {
             total_rows: 0,
             card_mode: true,
             selected_rows_info: false,
-            lastSelectedItemIndex: null
+            lastSelectedItemIndex: null,
+            isFirstTime : true,
         };
     },
     mounted() {
@@ -375,7 +398,7 @@ export default {
         this.initConfig();
         this.initialSort();
         if (!this.server_mode) {
-            this.filter();
+            this.filter(false);
         }
         this.handleShiftKey();
 
@@ -398,11 +421,13 @@ export default {
 
             this.pagination = (has(this.config, 'pagination')) ? this.config.pagination : true;
 
-            this.num_of_visibile_pagination_buttons = (has(this.config, 'num_of_visibile_pagination_buttons')) ? this.config.num_of_visibile_pagination_buttons : 5;
+            this.num_of_visibile_pagination_buttons = (has(this.config, 'num_of_visibile_pagination_buttons')) ? this.config.num_of_visibile_pagination_buttons : 7;
 
             this.per_page_options = (has(this.config, 'per_page_options')) ? this.config.per_page_options : [5,10,15];
 
             this.per_page = (has(this.config, 'per_page')) ? this.config.per_page : 10;
+
+            this.page = (has(this.config, 'page')) ? this.config.page : 1;
 
             this.checkbox_rows = (has(this.config, 'checkbox_rows')) ? this.config.checkbox_rows : false;
 
@@ -629,7 +654,7 @@ export default {
                     this.query.filters.push({
                         type: column.filter.type,
                         name: column.name,
-                        text: event.target.value,
+                        text: event.target.value.trim(),
                         config: column.filter
                     });
                 }
@@ -637,7 +662,7 @@ export default {
                 if (event.target.value === "") {
                     this.query.filters.splice(filter_index, 1);
                 } else {
-                    this.query.filters[filter_index].text = event.target.value;
+                    this.query.filters[filter_index].text = event.target.value.trim();
                 }
             }
         },
@@ -686,18 +711,16 @@ export default {
             this.paginateFilter();
         },
 
-        filter() {
+        filter(resetPage = true) {
             let res = filter(this.original_rows, (row) => {
                 let flag = true;
                 this.query.filters.some((filter, key) => {
                     if (filter.type === "simple") {
-                        if (filter.text === "") {
-                            flag = true;
-                            return true;
-                        }
                         if (this.simpleFilter(get(row, filter.name), filter.text,filter.config)) {
+                            // continue to next filter
                             flag = true;
                         } else {
+                            // stop here and break loop since one filter has failed
                             flag = false;
                             return true;
                         }
@@ -707,6 +730,24 @@ export default {
                         } else {
                             flag = false;
                             return true;
+                        }
+                    } else if (filter.type === "custom") {
+                        let index = findIndex(this.vbt_columns,{name:filter.name});
+                        if (index > -1) {
+                            let column = this.vbt_columns[index];
+                            if (column.filter.validator) {
+                                let result = column.filter.validator(get(row, filter.name),filter.text);
+                                if (result == true || result == undefined) {
+                                    flag = true;
+                                } else {
+                                    flag = false;
+                                    return true;
+                                }
+                            } else {
+                                flag = true;
+                            }
+                        } else {
+                            flag = true;
                         }
                     }
                 });
@@ -722,7 +763,9 @@ export default {
             }
 
             this.sort();
-            this.page = 1;
+            if (resetPage) {
+                this.page = 1;
+            }
         },
 
         globalSearch(temp_filtered_results) {
@@ -1124,7 +1167,27 @@ export default {
                         }
                         return extend({}, element, extra);
                     });
-                    this.filter();
+                    this.filter(!this.isFirstTime);
+                    this.isFirstTime = false;
+                }
+
+            },
+            deep: true
+        },
+        customFilters: {
+            handler: function (newVal, oldVal) {
+
+                if (!this.server_mode) {
+                    newVal.forEach(customFilter => {
+                        if (customFilter.name) {
+                            let index = this.query.filters.findIndex( filter => filter.name === customFilter.name );
+                            if (index == -1) {
+                                this.query.filters.push(customFilter);
+                            } else {
+                                this.query.filters[index].text = customFilter.text;
+                            }
+                        }
+                    });
                 }
 
             },
